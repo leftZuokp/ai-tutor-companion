@@ -1,0 +1,179 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "katex/dist/katex.min.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans-stack);
+  --font-mono: var(--font-mono-stack);
+  --font-heading: var(--font-serif-stack);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* 掌握度三色：朱砂(未掌握) / 金黄(巩固中) / 青玉(已掌握) */
+  --color-mastery-weak: var(--mastery-weak);
+  --color-mastery-mid: var(--mastery-mid);
+  --color-mastery-strong: var(--mastery-strong);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* —— 纸墨学堂主题 —— */
+  --font-sans-stack: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", system-ui, sans-serif;
+  --font-serif-stack: "Songti SC", "STSong", "Noto Serif SC", "SimSun", Georgia, serif;
+  --font-mono-stack: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --background: oklch(0.968 0.012 92); /* 米白宣纸 */
+  --foreground: oklch(0.31 0.024 265); /* 浓墨 */
+  --card: oklch(0.988 0.006 95);
+  --card-foreground: oklch(0.31 0.024 265);
+  --popover: oklch(0.988 0.006 95);
+  --popover-foreground: oklch(0.31 0.024 265);
+  --primary: oklch(0.45 0.095 258); /* 墨蓝 */
+  --primary-foreground: oklch(0.98 0.006 95);
+  --secondary: oklch(0.935 0.016 90);
+  --secondary-foreground: oklch(0.38 0.05 258);
+  --muted: oklch(0.943 0.013 90);
+  --muted-foreground: oklch(0.52 0.022 265);
+  --accent: oklch(0.93 0.028 85);
+  --accent-foreground: oklch(0.36 0.05 258);
+  --destructive: oklch(0.55 0.16 30); /* 朱砂 */
+  --border: oklch(0.875 0.015 85);
+  --input: oklch(0.875 0.015 85);
+  --ring: oklch(0.45 0.095 258);
+  --chart-1: oklch(0.45 0.095 258);
+  --chart-2: oklch(0.55 0.16 30);
+  --chart-3: oklch(0.68 0.13 78);
+  --chart-4: oklch(0.55 0.11 155);
+  --chart-5: oklch(0.6 0.02 265);
+  --radius: 0.375rem;
+
+  --mastery-weak: oklch(0.55 0.16 30); /* 朱砂红 */
+  --mastery-mid: oklch(0.68 0.13 78); /* 金黄 */
+  --mastery-strong: oklch(0.55 0.11 155); /* 青玉绿 */
+
+  --sidebar: oklch(0.955 0.014 90);
+  --sidebar-foreground: oklch(0.31 0.024 265);
+  --sidebar-primary: oklch(0.45 0.095 258);
+  --sidebar-primary-foreground: oklch(0.98 0.006 95);
+  --sidebar-accent: oklch(0.93 0.016 90);
+  --sidebar-accent-foreground: oklch(0.36 0.05 258);
+  --sidebar-border: oklch(0.875 0.015 85);
+  --sidebar-ring: oklch(0.45 0.095 258);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans-stack);
+    letter-spacing: 0.01em;
+    background-image:
+      radial-gradient(oklch(0.9 0.02 85 / 0.5) 0.8px, transparent 0.8px),
+      radial-gradient(oklch(0.9 0.02 85 / 0.35) 0.6px, transparent 0.6px);
+    background-size: 28px 28px, 17px 17px;
+    background-position: 0 0, 9px 12px;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-serif-stack);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  ::selection {
+    background: oklch(0.45 0.095 258 / 0.18);
+  }
+}
+
+@layer utilities {
+  /* 标题衬线字 */
+  .font-display {
+    font-family: var(--font-serif-stack);
+  }
+
+  /* 方格纸（题目卡片底纹，数学作业本质感） */
+  .grid-paper {
+    background-color: oklch(0.985 0.006 95);
+    background-image:
+      linear-gradient(oklch(0.45 0.095 258 / 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0.45 0.095 258 / 0.055) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+
+  /* 朱红印章（品牌标识） */
+  .seal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--mastery-weak);
+    color: oklch(0.98 0.005 95);
+    font-family: var(--font-serif-stack);
+    font-weight: 700;
+    line-height: 1.05;
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 1.5px oklch(0.98 0.005 95 / 0.55), inset 0 0 0 3px var(--mastery-weak);
+    transform: rotate(-2deg);
+  }
+
+  /* 试卷卡片左侧装订线 */
+  .worksheet-edge {
+    position: relative;
+  }
+  .worksheet-edge::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 1.75rem;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: repeating-linear-gradient(
+      to bottom,
+      oklch(0.55 0.16 30 / 0.4) 0 6px,
+      transparent 6px 12px
+    );
+  }
+
+  /* KaTeX 块级公式横向可滚动，避免溢出 */
+  .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0;
+  }
+}

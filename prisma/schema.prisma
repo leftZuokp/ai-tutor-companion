@@ -1,0 +1,89 @@
+// AI 智能私人家教伴读系统 — 数据模型
+// 规则驱动 MVP：学生档案 / 知识点 / 题库 / 答题记录 / 错题本(含艾宾浩斯复习计划)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 学生档案（无登录体系，MVP 以档案选择方式隔离数据）
+model User {
+  id          String       @id @default(uuid())
+  name        String
+  gradeLevel  Int // 1-12 年级
+  createdAt   DateTime     @default(now())
+  submissions Submission[]
+  errorBooks  ErrorBook[]
+}
+
+/// 知识点（考点），挂接 学科 × 年级 × 章节
+model KnowledgeNode {
+  id         String      @id // 例: "math_g8_pythagoras"
+  title      String
+  subject    String      @default("math")
+  grade      Int
+  chapter    String
+  sortOrder  Int         @default(0)
+  questions  Question[]
+  errorBooks ErrorBook[]
+
+  @@index([subject, grade])
+}
+
+/// 题库
+model Question {
+  id          String        @id @default(uuid())
+  nodeId      String
+  node        KnowledgeNode @relation(fields: [nodeId], references: [id])
+  type        String        @default("single_choice") // single_choice | fill_in
+  content     String // 题干，支持 $...$ / $$...$$ 数学公式
+  options     String? // 选项 JSON 数组字符串，填空题为 null
+  answer      String // 单选题为 "A"~"D"，填空题为标准文本
+  explanation String // 图文解析（文字 + 公式）
+  difficulty  Int           @default(2) // 1 易 / 2 中 / 3 难
+  sortOrder   Int           @default(0)
+  submissions Submission[]
+  errorBooks  ErrorBook[]
+
+  @@index([nodeId, difficulty])
+}
+
+/// 答题记录（每次作答一条）
+model Submission {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  userAnswer String
+  isCorrect  Boolean
+  createdAt  DateTime @default(now())
+
+  @@index([userId, questionId, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// 错题本（含艾宾浩斯复习计划：第 1/3/7 天）
+model ErrorBook {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  questionId     String
+  question       Question      @relation(fields: [questionId], references: [id])
+  nodeId         String
+  node           KnowledgeNode @relation(fields: [nodeId], references: [id])
+  errorCount     Int           @default(1) // 累计做错次数
+  isResolved     Boolean       @default(false) // 复习通关（7 天节点答对）
+  lastFailedAt   DateTime      @default(now())
+  reviewStage    Int           @default(0) // 0:+1天 1:+3天 2:+7天
+  nextReviewDate DateTime
+  createdAt      DateTime      @default(now())
+
+  @@unique([userId, questionId])
+  @@index([userId, nextReviewDate])
+}

@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env*
+data
+gui-test-screenshots
+prisma/*.db
+prisma/*.db-journal
+.DS_Store
+*.md
+# 宿主机的 Prisma 客户端(darwin 引擎)不得带入镜像，构建器内会重新 generate 出 linux 引擎
+src/generated/prisma

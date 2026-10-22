@@ -1,0 +1,42 @@
+# 智学伴读 · 公网部署
+#
+# 仅启动应用:        docker compose up -d --build
+# 应用 + HTTPS 网关: DOMAIN=your-domain.com docker compose --profile web up -d --build
+#
+# 数据持久化: ./data 目录存放 SQLite，重建容器数据不丢，定期备份该目录即可。
+# 服务器为 x86 时本地(Mac M系列)构建需: docker buildx build --platform linux/amd64 .
+
+services:
+  app:
+    build: .
+    image: ai-tutor-companion:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # 容器内绝对路径，指向挂载卷（lib/prisma.ts 对绝对路径原样使用）
+      DATABASE_URL: "file:/app/data/tutor.db"
+      SEED_ON_START: "true"
+    volumes:
+      - ./data:/app/data
+
+  # 可选：Caddy 自动 HTTPS 反向代理（--profile web 启用）
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["web"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

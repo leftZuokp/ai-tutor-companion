@@ -1,0 +1,5 @@
+# Caddy 配置：域名由环境变量 DOMAIN 注入，自动申请/续期 HTTPS 证书
+# 首次部署前先把域名 A 记录解析到服务器公网 IP
+{$DOMAIN}
+
+reverse_proxy app:3000
