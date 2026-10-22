@@ -1,5 +1,6 @@
 // AI 智能私人家教伴读系统 — 数据模型
-// 规则驱动 MVP：学生档案 / 知识点 / 题库 / 答题记录 / 错题本(含艾宾浩斯复习计划)
+// 规则引擎：学生档案 / 知识点(含前置依赖+知识卡片) / 题库(含能力维度+分步提示)
+// 答题记录 / 错题本(FSRS-5 记忆状态+四类归因) / FSRS 复习日志
 
 generator client {
   provider = "prisma-client"
@@ -21,16 +22,22 @@ model User {
   errorBooks  ErrorBook[]
 }
 
-/// 知识点（考点），挂接 学科 × 年级 × 章节
+/// 知识点（考点）：学科 × 年级 × 章节，含前置依赖与结构化知识卡片
 model KnowledgeNode {
-  id         String      @id // 例: "math_g8_pythagoras"
-  title      String
-  subject    String      @default("math")
-  grade      Int
-  chapter    String
-  sortOrder  Int         @default(0)
-  questions  Question[]
-  errorBooks ErrorBook[]
+  id             String      @id // 例: "math_g8_pythagoras"
+  title          String
+  subject        String      @default("math")
+  grade          Int
+  chapter        String
+  sortOrder      Int         @default(0)
+  /// 前置依赖知识点 ID 数组（JSON），支撑"前置依赖穿透"诊断
+  prerequisites  String?
+  /// 底层思想方法标签数组（JSON），如 ["数形结合","化归思想"]
+  thinkingMethods String?
+  /// LibreMath 结构化知识卡片（JSON）：premise 适用前提 / positive 正例 / negative 反例 / errors 高频易错点
+  card           String?
+  questions      Question[]
+  errorBooks     ErrorBook[]
 
   @@index([subject, grade])
 }
@@ -44,7 +51,11 @@ model Question {
   content     String // 题干，支持 $...$ / $$...$$ 数学公式
   options     String? // 选项 JSON 数组字符串，填空题为 null
   answer      String // 单选题为 "A"~"D"，填空题为标准文本
-  explanation String // 图文解析（文字 + 公式）
+  explanation String // 完整图文解析
+  /// 三级分步提示（JSON 数组）：[一级-条件梳理, 二级-方法联想]；三级为解析首段，交卷后逐步揭示
+  hints       String?
+  /// 能力维度：concept 概念理解 / logic 逻辑推演 / calc 运算准确 / application 综合应用
+  dimension   String        @default("concept")
   difficulty  Int           @default(2) // 1 易 / 2 中 / 3 难
   sortOrder   Int           @default(0)
   submissions Submission[]
@@ -68,22 +79,43 @@ model Submission {
   @@index([userId, createdAt])
 }
 
-/// 错题本（含艾宾浩斯复习计划：第 1/3/7 天）
+/// 错题卡片（含 FSRS-5 记忆状态与四类归因）
 model ErrorBook {
-  id             String        @id @default(uuid())
-  userId         String
-  user           User          @relation(fields: [userId], references: [id])
-  questionId     String
-  question       Question      @relation(fields: [questionId], references: [id])
-  nodeId         String
-  node           KnowledgeNode @relation(fields: [nodeId], references: [id])
-  errorCount     Int           @default(1) // 累计做错次数
-  isResolved     Boolean       @default(false) // 复习通关（7 天节点答对）
-  lastFailedAt   DateTime      @default(now())
-  reviewStage    Int           @default(0) // 0:+1天 1:+3天 2:+7天
-  nextReviewDate DateTime
-  createdAt      DateTime      @default(now())
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  questionId   String
+  question     Question      @relation(fields: [questionId], references: [id])
+  nodeId       String
+  node         KnowledgeNode @relation(fields: [nodeId], references: [id])
+  errorCount   Int           @default(1) // 累计做错次数
+  isResolved   Boolean       @default(false) // FSRS 稳定后标记掌握
+  /// 四类错题归因：concept_vague 概念模糊 / logic_gap 逻辑断层 / calc_error 计算失误 / misread 审题偏差
+  attribution  String?
+  lastFailedAt DateTime      @default(now())
+  /// FSRS-5：下次到期复习时间
+  due          DateTime
+  /// FSRS-5 记忆状态（JSON：stability/difficulty/reps/lapses/elapsedDays/scheduledDays/lastReview）
+  fsrsState    String?
+  logs         FsrsLog[]
+  createdAt    DateTime      @default(now())
 
   @@unique([userId, questionId])
-  @@index([userId, nextReviewDate])
+  @@index([userId, due])
+}
+
+/// FSRS-5 复习日志：每次复习的评分与算法状态快照（用于参数回溯与"越用越准"）
+model FsrsLog {
+  id          String    @id @default(uuid())
+  errorBookId String
+  errorBook   ErrorBook @relation(fields: [errorBookId], references: [id])
+  /// 学生反馈评价：1 重来 / 2 困难 / 3 良好 / 4 简单
+  rating      Int
+  /// 本次复习后 FSRS 状态快照（JSON）
+  state       String
+  stability   Float
+  difficulty  Float
+  createdAt   DateTime  @default(now())
+
+  @@index([errorBookId, createdAt])
 }

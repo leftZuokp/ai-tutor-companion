@@ -98,6 +98,23 @@ export default function AssessmentPage() {
     const sorted = [...touched].sort((a, b) => order[a.level] - order[b.level] || a.accuracy - b.accuracy);
     const weakCount = touched.filter((m) => m.level === "weak").length;
 
+    // 四能力维度得分（PRD 3.1）：概念理解 / 逻辑推演 / 运算准确 / 综合应用
+    const dimAgg = new Map<string, { total: number; correct: number }>();
+    const qMap = new Map((questions ?? []).map((q) => [q.id, q]));
+    for (const r of results) {
+      const dim = qMap.get(r.questionId)?.dimension ?? "concept";
+      const agg = dimAgg.get(dim) ?? { total: 0, correct: 0 };
+      agg.total += 1;
+      if (r.isCorrect) agg.correct += 1;
+      dimAgg.set(dim, agg);
+    }
+    const DIM_NAMES: Record<string, string> = {
+      concept: "概念理解",
+      logic: "逻辑推演",
+      calc: "运算准确",
+      application: "综合应用",
+    };
+
     return (
       <div className="mx-auto max-w-3xl space-y-5">
         <div>
@@ -117,6 +134,39 @@ export default function AssessmentPage() {
             </p>
           </CardContent>
         </Card>
+
+        {/* 四能力维度诊断 */}
+        {total > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display">能力维度诊断</CardTitle>
+              <CardDescription>概念理解 / 逻辑推演 / 运算准确 / 综合应用 四维得分</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {Object.keys(DIM_NAMES).map((dim) => {
+                const agg = dimAgg.get(dim);
+                const pct = agg && agg.total > 0 ? Math.round((agg.correct / agg.total) * 100) : null;
+                return (
+                  <div key={dim} className="flex items-center gap-3">
+                    <span className="w-20 shrink-0 text-sm font-medium">{DIM_NAMES[dim]}</span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          pct === null ? "bg-muted-foreground/20" : pct >= 80 ? "bg-mastery-strong" : pct >= 60 ? "bg-mastery-mid" : "bg-mastery-weak",
+                        )}
+                        style={{ width: pct === null ? "100%" : `${Math.max(pct, 4)}%` }}
+                      />
+                    </div>
+                    <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                      {pct === null ? "未考察" : `${agg!.correct}/${agg!.total} · ${pct}%`}
+                    </span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
@@ -144,6 +194,11 @@ export default function AssessmentPage() {
                       style={{ width: `${Math.max(node.accuracy * 100, 4)}%` }}
                     />
                   </div>
+                  {node.prereqIssues.length > 0 && (
+                    <p className="mt-1 text-xs text-mastery-weak">
+                      前置穿透：根因可能是「{node.prereqIssues.map((p) => p.title).join("、")}」掌握不牢
+                    </p>
+                  )}
                 </div>
                 <MasteryBadge level={node.level} />
                 {node.level !== "mastered" && (

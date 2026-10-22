@@ -1,6 +1,6 @@
 "use client";
 
-/** 分级专项训练：年级 → 学科(数学) → 章节/知识点 → 逐题练习 */
+/** 分级专项训练：年级 → 学科(数学) → 章节/知识点 → 逐题练习（含知识卡片与多维筛选） */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,13 +8,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MasteryBadge } from "@/components/mastery-badge";
-import { MathText } from "@/components/math-text";
+import { KnowledgeCard } from "@/components/knowledge-card";
 import { QuestionRunner, type RunnerQuestion } from "@/components/question-runner";
 import { RequireStudent } from "@/components/require-student";
 import { gradeLabel } from "@/lib/grade";
 import { useStudent } from "@/lib/student-context";
 import type { KnowledgeNodeDTO, MasteryNodeStatDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const FILTER_ALL = "all";
 
 export default function PracticePage() {
   const { current, students } = useStudent();
@@ -25,6 +27,9 @@ export default function PracticePage() {
   const [mastery, setMastery] = useState<Record<string, MasteryNodeStatDTO>>({});
   const [selectedNode, setSelectedNode] = useState<KnowledgeNodeDTO | null>(null);
   const [questions, setQuestions] = useState<RunnerQuestion[] | null>(null);
+  // 多维筛选（参考刺豚数学题库）：难度 / 题型
+  const [difficulty, setDifficulty] = useState<string>(FILTER_ALL);
+  const [questionType, setQuestionType] = useState<string>(FILTER_ALL);
 
   useEffect(() => {
     let active = true;
@@ -53,13 +58,25 @@ export default function PracticePage() {
       });
   }, [current, grade, nodes]);
 
-  const loadQuestions = useCallback((node: KnowledgeNodeDTO) => {
-    setSelectedNode(node);
-    setQuestions(null);
-    void fetch(`/api/questions?nodeId=${node.id}`)
-      .then((r) => r.json())
-      .then(setQuestions);
-  }, []);
+  const loadQuestions = useCallback(
+    (node: KnowledgeNodeDTO, diff: string, type: string) => {
+      setSelectedNode(node);
+      setQuestions(null);
+      const params = new URLSearchParams({ nodeId: node.id });
+      if (diff !== FILTER_ALL) params.set("difficulty", diff);
+      if (type !== FILTER_ALL) params.set("type", type === "single_choice" ? "single_choice" : "fill_in");
+      void fetch(`/api/questions?${params}`)
+        .then((r) => r.json())
+        .then(setQuestions);
+    },
+    [],
+  );
+
+  const applyFilter = (diff: string, type: string) => {
+    setDifficulty(diff);
+    setQuestionType(type);
+    if (selectedNode) loadQuestions(selectedNode, diff, type);
+  };
 
   const chapters = useMemo(() => {
     const map = new Map<string, KnowledgeNodeDTO[]>();
@@ -71,6 +88,17 @@ export default function PracticePage() {
     return [...map.entries()];
   }, [nodes]);
 
+  const totalQuestions = (nodes ?? []).reduce((s, n) => s + n.questionCount, 0);
+  // 全量知识点标题表：用于把跨年级前置依赖 ID 映射为可读标题
+  const [titleById, setTitleById] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    void fetch("/api/knowledge")
+      .then((r) => r.json())
+      .then((list: KnowledgeNodeDTO[]) =>
+        setTitleById(new Map(list.map((n) => [n.id, n.title]))),
+      );
+  }, []);
+
   if (students === null) return <RequireStudent loading />;
   if (!current) return <RequireStudent />;
 
@@ -79,7 +107,9 @@ export default function PracticePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold">分级专项训练</h1>
-          <p className="mt-1 text-sm text-muted-foreground">选择年级与知识点，逐题作答，即时判题并查看标准解析</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {nodes ? `${nodes.length} 个知识点 · ${totalQuestions} 道题 · 逐题作答，答错可分步提示` : "选择年级与知识点开始练习"}
+          </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">年级</span>
@@ -124,7 +154,7 @@ export default function PracticePage() {
                       <button
                         key={node.id}
                         type="button"
-                        onClick={() => loadQuestions(node)}
+                        onClick={() => loadQuestions(node, difficulty, questionType)}
                         className={cn(
                           "flex w-full items-center justify-between gap-2 rounded-md border bg-card/70 px-3 py-2.5 text-left transition-all",
                           "hover:border-primary/50 hover:shadow-sm",
@@ -146,42 +176,65 @@ export default function PracticePage() {
         </div>
 
         {/* 答题区 */}
-        <div>
+        <div className="space-y-3">
           {!selectedNode ? (
             <Card className="grid-paper worksheet-edge flex h-full min-h-64 items-center justify-center border-dashed">
               <CardContent className="pt-0 text-center text-sm text-muted-foreground">
                 <p className="font-display text-base text-foreground">← 从左侧选择一个知识点开始练习</p>
-                <p className="mt-2">
-                  系统会自动判题、收录错题，并按
-                  <MathText content="$1/3/7$" /> 天节奏安排复习
-                </p>
-              </CardContent>
-            </Card>
-          ) : questions === null ? (
-            <div className="space-y-3">
-              <Skeleton className="h-10 w-1/2" />
-              <Skeleton className="h-64 w-full" />
-            </div>
-          ) : questions.length === 0 ? (
-            <Card>
-              <CardContent className="pt-5 text-sm text-muted-foreground">
-                该知识点暂无题目。
-                <Button asChild variant="link" size="sm"><Link href="/practice">换一个知识点</Link></Button>
+                <p className="mt-2">答错自动进错题本，由 FSRS-5 记忆引擎安排复习</p>
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
+            <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-muted-foreground">
                   正在练习：<span className="font-medium text-foreground">{selectedNode.title}</span>
                   <span className="mx-2 opacity-40">|</span>{selectedNode.chapter}
                 </p>
-                <Button asChild size="xs" variant="outline">
-                  <Link href={`/practice/reinforce?nodeId=${selectedNode.id}`}>随机变式巩固 →</Link>
-                </Button>
+                <div className="flex items-center gap-2 text-xs">
+                  <Select value={difficulty} onValueChange={(v) => applyFilter(v, questionType)}>
+                    <SelectTrigger className="h-7 w-20 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={FILTER_ALL}>全部难度</SelectItem>
+                      <SelectItem value="1">易</SelectItem>
+                      <SelectItem value="2">中</SelectItem>
+                      <SelectItem value="3">难</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={questionType} onValueChange={(v) => applyFilter(difficulty, v)}>
+                    <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={FILTER_ALL}>全部题型</SelectItem>
+                      <SelectItem value="single_choice">选择题</SelectItem>
+                      <SelectItem value="fill_in">填空题</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button asChild size="xs" variant="outline">
+                    <Link href={`/practice/reinforce?nodeId=${selectedNode.id}`}>随机变式巩固 →</Link>
+                  </Button>
+                </div>
               </div>
-              <QuestionRunner questions={questions} mode="practice" />
-            </div>
+
+              <KnowledgeCard
+                node={selectedNode}
+                prereqTitles={(selectedNode.prerequisites ?? []).map((id) => titleById.get(id) ?? id)}
+              />
+
+              {questions === null ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-1/2" />
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              ) : questions.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-5 text-sm text-muted-foreground">
+                    当前筛选条件下没有题目，试试放宽难度或题型筛选。
+                  </CardContent>
+                </Card>
+              ) : (
+                <QuestionRunner questions={questions} mode="practice" />
+              )}
+            </>
           )}
         </div>
       </div>

@@ -88,7 +88,7 @@ export default function HomePage() {
         <Card className="border-mastery-mid/35 bg-gradient-to-br from-card to-accent/40">
           <CardHeader>
             <CardTitle className="font-display">今日复习</CardTitle>
-            <CardDescription>按艾宾浩斯节奏（第 1 / 3 / 7 天）自动安排</CardDescription>
+            <CardDescription>FSRS-5 记忆引擎按遗忘临界点自动安排</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between">
             {stats === null ? (

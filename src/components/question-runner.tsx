@@ -2,8 +2,10 @@
 
 /**
  * 通用答题组件：全部答题场景复用。
- * - practice 模式：逐题作答、即时判题、展示解析（专项训练 / 变式巩固 / 今日复习）
- * - exam 模式：整卷作答后统一交卷（摸底测评），由父级提交并生成报告
+ * - practice 模式：逐题作答、即时判题；答错后按"提示 1（条件梳理）→ 提示 2（方法联想）→ 完整解析"
+ *   三级渐进揭示（苏格拉底式引导的规则化实现），杜绝"直接看解析假装听懂"。
+ * - review 模式：practice + FSRS 四档自评（答对后选"困难/良好/简单"再提交）。
+ * - exam 模式：整卷作答后统一交卷（摸底测评），由父级提交并生成报告。
  */
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { MathText } from "@/components/math-text";
 import { RequireStudent } from "@/components/require-student";
 import { useStudent } from "@/lib/student-context";
-import type { GradedResultDTO, QuestionDTO } from "@/lib/types";
+import { DIMENSION_LABELS, type Dimension, type GradedResultDTO, type QuestionDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export interface RunnerQuestion extends QuestionDTO {
@@ -29,14 +31,13 @@ export interface PracticeSummary {
 interface QuestionRunnerProps {
   questions: RunnerQuestion[];
   mode: "practice" | "exam";
-  /** practice 完成一组后回调 */
+  /** review 场景开启 FSRS 四档自评 */
+  enableRating?: boolean;
   onFinish?: (summary: PracticeSummary) => void;
-  /** exam 交卷回调（已答题目） */
   onExamSubmit?: (answers: Array<{ questionId: string; userAnswer: string }>) => void;
   examSubmitting?: boolean;
-  /** 每题附加信息（如复习阶段提示），key 为 questionId */
+  /** 每题附加信息（如"第 N 次复习 · 当前可检索性 82%"），key 为 questionId */
   questionMeta?: Record<string, string>;
-  /** 完成页额外内容（如返回入口） */
   summaryExtra?: React.ReactNode;
 }
 
@@ -52,12 +53,13 @@ function DifficultyStars({ level }: { level: 1 | 2 | 3 }) {
 }
 
 export function QuestionRunner({
-  questions, mode, onFinish, onExamSubmit, examSubmitting = false, questionMeta, summaryExtra,
+  questions, mode, enableRating = false, onFinish, onExamSubmit, examSubmitting = false, questionMeta, summaryExtra,
 }: QuestionRunnerProps) {
   const { current } = useStudent();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, GradedResultDTO>>({});
+  const [hintLevel, setHintLevel] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [finished, setFinished] = useState(false);
 
@@ -68,10 +70,9 @@ export function QuestionRunner({
   );
 
   if (!current) return <RequireStudent loading={false} />;
-  if (!question && !finished) return null;
 
-  /* ————— practice 模式 ————— */
-  const submitPractice = async () => {
+  /* ————— 提交与判题 ————— */
+  const submit = async (rating?: number) => {
     if (!question || submitting) return;
     setSubmitting(true);
     try {
@@ -80,7 +81,7 @@ export function QuestionRunner({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: current.id,
-          answers: [{ questionId: question.id, userAnswer: answers[question.id] ?? "" }],
+          answers: [{ questionId: question.id, userAnswer: answers[question.id] ?? "", ...(rating !== undefined ? { rating } : {}) }],
         }),
       });
       const data = await res.json();
@@ -107,7 +108,9 @@ export function QuestionRunner({
           <p className="mt-3 text-5xl font-bold tabular-nums text-primary">
             {correct}<span className="text-xl text-muted-foreground"> / {questions.length}</span>
           </p>
-          <p className="mt-2 text-sm text-muted-foreground">正确率 {accuracy}%，错题已自动收入错题本。</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            正确率 {accuracy}%；错题已按 FSRS-5 记忆曲线安排复习。
+          </p>
           {summaryExtra && <div className="mt-6">{summaryExtra}</div>}
         </div>
       </div>
@@ -117,6 +120,10 @@ export function QuestionRunner({
 
   const result = results[question.id];
   const revealed = mode === "practice" && result !== undefined;
+  const level = hintLevel[question.id] ?? 0; // 0: 未揭示 1: 提示一 2: 提示二 3: 完整解析
+  const hints = result?.hints ?? null;
+  // 答错且存在分步提示：未揭示到解析层时不显示完整解析
+  const showExplanation = !result || result.isCorrect || !hints || level >= 3;
 
   const setAnswer = (value: string) => {
     if (revealed) return;
@@ -153,6 +160,9 @@ export function QuestionRunner({
             {questionMeta[question.id]}
           </span>
         )}
+        <span className="rounded-full border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground">
+          {DIMENSION_LABELS[question.dimension as Dimension] ?? "综合"}
+        </span>
         {question.type === "fill_in" && (
           <span className="rounded-full border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground">填空题</span>
         )}
@@ -208,15 +218,36 @@ export function QuestionRunner({
             placeholder="在此填写答案（分数用 a/b 表示，如 4/5）"
             className="max-w-sm bg-card/80"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && mode === "practice" && answers[question.id]?.trim() && !revealed) {
-                void submitPractice();
+              if (e.key === "Enter" && mode === "practice" && !enableRating && answers[question.id]?.trim() && !revealed) {
+                void submit();
               }
             }}
           />
         </div>
       )}
 
-      {/* 判题结果与解析 */}
+      {/* 复习自评（Anki 式）：作答后选择回忆质量，随答案一并提交（答错自动按"重来"调度） */}
+      {!revealed && mode === "practice" && enableRating && (
+        <div className="mt-5 pl-6">
+          <Separator className="mb-3 bg-border/70" />
+          <p className="mb-2 text-sm text-muted-foreground">回忆自评（影响 FSRS 下次复习间隔）：</p>
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3, 4].map((r) => (
+              <Button
+                key={r}
+                size="sm"
+                variant={r <= 2 ? "outline" : "default"}
+                disabled={!answers[question.id]?.trim() || submitting}
+                onClick={() => void submit(r)}
+              >
+                {["重来", "困难", "良好", "简单"][r - 1]}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 判题结果：答错先分步提示，再揭示完整解析 */}
       {revealed && result && (
         <div className="mt-5 pl-6">
           <Separator className="mb-4 bg-border/80" />
@@ -232,22 +263,68 @@ export function QuestionRunner({
             {!result.isCorrect && (
               <p className="mt-1.5 text-sm">
                 你的答案：<span className="text-mastery-weak">{result.userAnswer || "（未作答）"}</span>
-                <span className="mx-2 text-muted-foreground">|</span>
-                正确答案：<span className="font-semibold text-mastery-strong">
-                  <MathText content={question.options ? result.answer : `$${result.answer}$`} />
-                </span>
+                {showExplanation && (
+                  <>
+                    <span className="mx-2 text-muted-foreground">|</span>
+                    正确答案：<span className="font-semibold text-mastery-strong">
+                      <MathText content={question.options ? result.answer : `$${result.answer}$`} />
+                    </span>
+                  </>
+                )}
               </p>
             )}
-            <Separator className="my-3 bg-border/60" />
-            <p className="text-sm font-medium text-muted-foreground">解析</p>
-            <div className="mt-1.5 text-[15px] leading-8">
-              <MathText content={result.explanation} />
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              {result.isCorrect
-                ? result.reviewAdvanced ? "✓ 错题复习计划已推进（艾宾浩斯）" : ""
-                : "已自动收入错题本，将按第 1 / 3 / 7 天节奏提醒复习。"}
-            </p>
+
+            {/* 一级/二级渐进提示 */}
+            {!result.isCorrect && hints && level >= 1 && (
+              <div className="mt-3 rounded-md border border-primary/25 bg-primary/5 px-3 py-2.5">
+                <p className="text-xs font-medium text-primary">一级提示 · 条件梳理</p>
+                <div className="mt-1 text-sm leading-7"><MathText content={hints[0]} /></div>
+                {level >= 2 && (
+                  <>
+                    <p className="mt-3 text-xs font-medium text-primary">二级提示 · 方法联想</p>
+                    <div className="mt-1 text-sm leading-7"><MathText content={hints[1]} /></div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 揭示控制区 */}
+            {!result.isCorrect && hints && level < 3 ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {level === 0 && (
+                  <Button size="sm" variant="outline" onClick={() => setHintLevel((p) => ({ ...p, [question.id]: 1 }))}>
+                    💡 提示一下
+                  </Button>
+                )}
+                {level === 1 && (
+                  <Button size="sm" variant="outline" onClick={() => setHintLevel((p) => ({ ...p, [question.id]: 2 }))}>
+                    再给一层提示
+                  </Button>
+                )}
+                {level === 2 && (
+                  <Button size="sm" onClick={() => setHintLevel((p) => ({ ...p, [question.id]: 3 }))}>
+                    我再想想，看完整解析
+                  </Button>
+                )}
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => setHintLevel((p) => ({ ...p, [question.id]: 3 }))}
+                >
+                  跳过提示，直接看解析
+                </button>
+              </div>
+            ) : showExplanation ? (
+              <>
+                <Separator className="my-3 bg-border/60" />
+                <p className="text-sm font-medium text-muted-foreground">解析</p>
+                <div className="mt-1.5 text-[15px] leading-8">
+                  <MathText content={result.explanation} />
+                </div>
+              </>
+            ) : null}
+
+            {result.reviewNote && <p className="mt-3 text-xs text-muted-foreground">{result.reviewNote}</p>}
           </div>
           <div className="mt-4 flex justify-end">
             <Button onClick={nextPractice}>
@@ -257,10 +334,10 @@ export function QuestionRunner({
         </div>
       )}
 
-      {/* practice 未提交时的操作区 */}
-      {!revealed && mode === "practice" && (
+      {/* practice 未提交时的操作区（enableRating 模式使用上方四档自评按钮提交） */}
+      {!revealed && mode === "practice" && !enableRating && (
         <div className="mt-5 flex justify-end pl-6">
-          <Button onClick={() => void submitPractice()} disabled={!answers[question.id]?.trim() || submitting}>
+          <Button onClick={() => void submit()} disabled={!answers[question.id]?.trim() || submitting}>
             {submitting ? "判题中…" : "提交本题"}
           </Button>
         </div>
@@ -268,7 +345,7 @@ export function QuestionRunner({
     </div>
   );
 
-  /* ————— exam 模式包装：题号导航 + 交卷 ————— */
+  /* ————— exam 模式包装 ————— */
   if (mode === "exam") {
     return (
       <div className="space-y-4">
@@ -312,7 +389,7 @@ export function QuestionRunner({
     );
   }
 
-  /* ————— practice 模式包装：进度条 ————— */
+  /* ————— practice 模式包装 ————— */
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">

@@ -13,7 +13,7 @@ import { MasteryBadge, MasteryDot } from "@/components/mastery-badge";
 import { RequireStudent } from "@/components/require-student";
 import { gradeLabel } from "@/lib/grade";
 import { useStudent } from "@/lib/student-context";
-import type { DashboardStatsDTO, MasteryNodeStatDTO } from "@/lib/types";
+import { ATTRIBUTION_LABELS, type DashboardStatsDTO, type MasteryNodeStatDTO } from "@/lib/types";
 
 const INK = "#3d5a94"; // 墨蓝
 const VERMILION = "#b6432e"; // 朱砂
@@ -144,11 +144,22 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* 薄弱知识点排行 */}
+        {/* 薄弱知识点排行 + 归因分布 */}
         <Card>
           <CardHeader>
             <CardTitle className="font-display">薄弱知识点 Top 5</CardTitle>
-            <CardDescription>按累计做错次数排序</CardDescription>
+            <CardDescription>
+              按累计做错次数排序
+              {stats && stats.attributionStats.length > 0 && (
+                <span className="ml-2 inline-flex flex-wrap gap-1">
+                  {stats.attributionStats.map((a) => (
+                    <span key={a.attribution} className="rounded-full border border-mastery-weak/30 px-1.5 py-0.5 text-[11px] text-mastery-weak">
+                      {ATTRIBUTION_LABELS[a.attribution]}×{a.count}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {stats === null ? (

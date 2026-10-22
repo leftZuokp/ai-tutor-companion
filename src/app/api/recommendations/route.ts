@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { QuestionDTO } from "@/lib/types";
+import type { Dimension, QuestionDTO } from "@/lib/types";
 
 
 /**
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   const pick = async (difficulties: number[], take: number) => {
     const pool = await prisma.question.findMany({
       where: { nodeId, difficulty: { in: difficulties }, id: { notIn: doneIds } },
-      select: { id: true, nodeId: true, type: true, content: true, options: true, difficulty: true },
+      select: { id: true, nodeId: true, type: true, content: true, options: true, difficulty: true, dimension: true },
     });
     // 随机洗牌后取前 take 道，保证每次推荐的变式组合有变化
     return pool.sort(() => Math.random() - 0.5).slice(0, take);
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const fallback = await prisma.question.findMany({
       where: { nodeId, id: { notIn: excludeIds } },
       take: count - questions.length,
-      select: { id: true, nodeId: true, type: true, content: true, options: true, difficulty: true },
+      select: { id: true, nodeId: true, type: true, content: true, options: true, difficulty: true, dimension: true },
     });
     questions = [...questions, ...fallback];
   }
@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
     content: q.content,
     options: q.options ? (JSON.parse(q.options) as string[]) : null,
     difficulty: (Math.min(3, Math.max(1, q.difficulty)) as 1 | 2 | 3),
+    dimension: (["concept", "logic", "calc", "application"].includes(q.dimension) ? q.dimension : "concept") as Dimension,
   }));
 
   return NextResponse.json({ questions: dto, allDone: doneIds.length > 0 && dto.length === 0 });

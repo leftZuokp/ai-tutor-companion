@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.errorBook.findMany({
       where: { userId },
-      select: { nodeId: true, errorCount: true, isResolved: true, nextReviewDate: true },
+      select: { nodeId: true, errorCount: true, isResolved: true, due: true, attribution: true },
     }),
     getMasteryStats(userId, { grade: user.gradeLevel }),
   ]);
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const pendingReviewCount = errorBooks.filter(
-    (e) => !e.isResolved && e.nextReviewDate.getTime() <= today.getTime(),
+    (e) => !e.isResolved && e.due.getTime() <= today.getTime(),
   ).length;
 
   // 薄弱知识点 Top5：按累计做错次数倒序（errorCount 汇总）
@@ -74,6 +74,15 @@ export async function GET(request: NextRequest) {
     correct: agg.correct,
     accuracy: agg.total === 0 ? 0 : agg.correct / agg.total,
   }));
+
+  // 错题归因分布（PRD 3.4.1 四类归因）
+  const attributionCounts = new Map<string, number>();
+  for (const e of errorBooks) {
+    if (e.attribution) attributionCounts.set(e.attribution, (attributionCounts.get(e.attribution) ?? 0) + 1);
+  }
+  const attributionStats = [...attributionCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([attribution, count]) => ({ attribution: attribution as DashboardStatsDTO["attributionStats"][number]["attribution"], count }));
 
   // 近 14 天答题趋势（无答题记录的日期补零）
   const dailyMap = new Map<string, { total: number; correct: number }>();
@@ -114,6 +123,7 @@ export async function GET(request: NextRequest) {
     chapterStats,
     dailyStats,
     masteryOverview,
+    attributionStats,
   };
   return NextResponse.json(dto);
 }
